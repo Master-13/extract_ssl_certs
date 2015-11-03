@@ -64,7 +64,7 @@ def extract_file(filepath):
             count+=1
             try:
                 upperdata=dpkt.ethernet.Ethernet(buf).data
-                while upperdata.__class__ not in [dpkt.ip.IP, str]:   #循环去找IP层，这主要是解决一些网络有pppoe和ppp曾的缘故
+                while upperdata.__class__ not in [dpkt.ip.IP, str]:   #循环去找IP层，这主要是解决一些网络有pppoe和ppp层的缘故
                     upperdata=upperdata.data
                 if upperdata.__class__==dpkt.ip.IP:
                     #if upperdata.sport!=443: continue
@@ -115,9 +115,9 @@ def extract_file(filepath):
                 curpos+=5+struct.unpack('!H', sslcombined[curpos+3:curpos+5])[0]
                 continue
             cert=sslcombined[curpos+12:curpos+12+certlen]
-            with open('%s.crt' % (srcip), 'wb') as f:
+            with open('%s.der' % (srcip), 'wb') as f:
                 f.write(cert[3:])
-            log.info('%s.crt'%srcip)
+            log.info('%s.der'%srcip)
             doneList.append(srcip)
             certcount+=1
             break
@@ -132,4 +132,4 @@ if args.dir!=None:
 elif args.file!=None:
     extract_file(args.file)
 
-log.info('Extract %d crt files.' % certcount)
+log.info('Extract %d der files.' % certcount)
