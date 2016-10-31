@@ -1,71 +1,27 @@
 #coding=utf-8
 #version:20161026
 import dpkt
-import struct, socket, sys, os, argparse, logging, md5
+import struct, socket, sys, os, argparse, md5
 
 import multiprocessing
 
-parser = argparse.ArgumentParser(description='Extract SSL certs')
-parser.add_argument("-f", "--file", action='store', help="Extract SSL certificates from a single file.", default = None)
-parser.add_argument("-d", "--dir", action='store', help="Extract SSL certificates from a directory containing cap files.", default = None)
-parser.add_argument("-e", "--exclude", action='store', help="Filename containing skip ip list, ip list in this file will be skip when extracting.", default=None)
-#parser.add_argument("-h", "--help")
-parser.add_argument("-l", "--log", action='store', help="Filename to save console log", default = None)
-
-args = parser.parse_args()
-
-def showUsage():
-    print 'extract_ssl_certs.py [-f 文件名|-d 目录] [-e 排除IP列表文件] [-l log]'
-
-if args.file is None and args.dir is None or args.file is not None and args.dir is not None:
-    print "Either -f or -d is required, but can't be both there."
-    showUsage()
-    exit(-1)
-
-####################################
-# Setting log
-log = logging.getLogger('extractor')
-log_format = logging.Formatter("%(asctime)s %(lineno)s %(levelname)-07s %(message)s")
-stdHandler = logging.StreamHandler(sys.stdout)
-stdHandler.setFormatter(log_format)
-log.addHandler(stdHandler)
-log.setLevel(logging.DEBUG)
-if args.log != None:
-    fh = logging.FileHandler(args.log)
-    fh.setFormatter(log_format)
-    log.addHandler(fh)
-
-
 #####################################
 # Global vars
-doneList=[]
-certcount=0
-try:
-    os.mkdir('certs')
-except:
-    pass
 
-if args.exclude != None:
-    try:
-        with open(args.exclude,'rb') as f:
-            lines=f.readlines()
-        for line in lines:
-            doneList.append(line.strip(' \r\n'))
-    except:
-        pass
+def showUsage():
+    print 'extract_ssl_certs.py [-f 文件名|-d 目录]'
 
 def extract_file(filepath):
-    if not fn.endswith('cap'):
+    if not filepath.endswith('cap'):
         return
-    
-    global certcount
-    log.debug('Extract: %s' % (filepath))
+
+    print 'Extract: %s' % (filepath)
     tcp_piece={}
     f = open(filepath,'rb')
     try:
         pcap = dpkt.pcap.Reader(f)
     except:
-        log.error("Error reading cap: %s", filepath)
+        print "Error reading cap: %s"%filepath
         return
 
     count=0
@@ -85,8 +41,6 @@ def extract_file(filepath):
                     continue
                 if not ssldata: continue    #如果是空就扔掉了，包括那个同一个SEQ对应的ACK的包
                 srcip=socket.inet_ntoa(ippack.src)
-                if srcip in doneList:
-                    continue
                 #定义了一个四元组（源IP，目的IP，源端口，目的端口）
                 tuple4=(srcip, socket.inet_ntoa(ippack.dst), tcppack.sport, tcppack.dport)
                 seq=tcppack.seq
@@ -103,9 +57,6 @@ def extract_file(filepath):
     for t4,dic in tcp_piece.iteritems():    #根据4元组进行组流
         srcip=t4[0]
         sport=t4[2]
-        #md5_dstip_dstport=md5.md5(t4[1]+str(t4[3])).hexdigest()
-        if srcip in doneList:
-            continue
         seq=min(dic.keys())
         sslcombined=dic[seq]
         piecelen=len(dic[seq])
@@ -129,7 +80,7 @@ def extract_file(filepath):
             if certlen>totallen:    #证书的长度超过了数据包的长度，通常是数据包数据丢失导致的
                 break
             if certlen>50000:
-                log.warn('Very big cert.')
+                print 'Very big cert.'
                 curpos+=5+struct.unpack('!H', sslcombined[curpos+3:curpos+5])[0]
                 continue
             
@@ -146,18 +97,36 @@ def extract_file(filepath):
                 filename='%s_%d_%d_%s.cer' % (srcip, sport, sub_cert_count, md5cert)
                 with open('certs\\%s' % filename, 'wb') as f:
                     f.write(this_sub_cert)
-                log.info(filename)
+                print filename
                 sub_cert_count+=1         
-            certcount+=sub_cert_count-1
             break
 
-if args.dir!=None:
-    p=multiprocessing.Pool(4)   #254有4个核，所以选了4
-    for root, parent, files in os.walk(args.dir):
-        if not files==[]:
-            p.map(extract_file, map(lambda x:root+os.sep+x, files))
-            
-elif args.file!=None:
-    extract_file(args.file)
-
-log.info('Extract %d cer files.' % certcount)
+if __name__=='__main__':
+    parser = argparse.ArgumentParser(description='Extract SSL certs')
+    parser.add_argument("-f", "--file", action='store', help="Extract SSL certificates from a single file.", default = None)
+    parser.add_argument("-d", "--dir", action='store', help="Extract SSL certificates from a directory containing cap files.", default = None)
+    parser.add_argument("-e", "--exclude", action='store', help="Filename containing skip ip list, ip list in this file will be skip when extracting.", default=None)
+    
+    args = parser.parse_args()
+    if args.file is None and args.dir is None or args.file is not None and args.dir is not None:
+        print "Either -f or -d is required, but can't be both there."
+        showUsage()
+        exit(-1)
+    
+    try:
+        os.mkdir('certs')
+    except:
+        pass
+    
+    if args.dir!=None:
+        cpu_count=multiprocessing.cpu_count()-2
+        if cpu_count<0:
+            cpu_count=1
+        p=multiprocessing.Pool(cpu_count)
+        for root, parent, files in os.walk(args.dir):
+            if not files==[]:
+                p.map(extract_file, map(lambda x:root+os.sep+x, files))
+        
+    elif args.file!=None:
+        extract_file(args.file)
+    
