@@ -6,7 +6,7 @@ import struct, socket, sys, os, argparse, md5
 import multiprocessing
 
 def showUsage():
-    print 'extract_ssl_certs.py [-f ÎÄ¼şÃû|-d Ä¿Â¼]'
+    print 'extract_ssl_certs.py [-f æ–‡ä»¶å|-d ç›®å½•]'
 
 def extract_file(filepath):
     if not filepath.endswith('cap'):
@@ -27,18 +27,18 @@ def extract_file(filepath):
             count+=1
             try:
                 upperdata=dpkt.ethernet.Ethernet(buf).data
-                while upperdata.__class__ not in [dpkt.ip.IP, str]:   #Ñ­»·È¥ÕÒIP²ã£¬ÕâÖ÷ÒªÊÇ½â¾öÒ»Ğ©ÍøÂçÓĞpppoeºÍppp²ãµÄÔµ¹Ê
+                while upperdata.__class__ not in [dpkt.ip.IP, str]:   #å¾ªç¯å»æ‰¾IPå±‚ï¼Œè¿™ä¸»è¦æ˜¯è§£å†³ä¸€äº›ç½‘ç»œæœ‰pppoeå’Œpppå±‚çš„ç¼˜æ•…
                     upperdata=upperdata.data
                 if upperdata.__class__==dpkt.ip.IP:
                     #if upperdata.sport!=443: continue
                     ippack=upperdata
                     tcppack=ippack.data
                     ssldata=tcppack.data
-                else:   #IP²ãÎ´ÕÒµ½
+                else:   #IPå±‚æœªæ‰¾åˆ°
                     continue
-                if not ssldata: continue    #Èç¹ûÊÇ¿Õ¾ÍÈÓµôÁË£¬°üÀ¨ÄÇ¸öÍ¬Ò»¸öSEQ¶ÔÓ¦µÄACKµÄ°ü
+                if not ssldata: continue    #å¦‚æœæ˜¯ç©ºå°±æ‰”æ‰äº†ï¼ŒåŒ…æ‹¬é‚£ä¸ªåŒä¸€ä¸ªSEQå¯¹åº”çš„ACKçš„åŒ…
                 srcip=socket.inet_ntoa(ippack.src)
-                #¶¨ÒåÁËÒ»¸öËÄÔª×é£¨Ô´IP£¬Ä¿µÄIP£¬Ô´¶Ë¿Ú£¬Ä¿µÄ¶Ë¿Ú£©
+                #å®šä¹‰äº†ä¸€ä¸ªå››å…ƒç»„ï¼ˆæºIPï¼Œç›®çš„IPï¼Œæºç«¯å£ï¼Œç›®çš„ç«¯å£ï¼‰
                 tuple4=(srcip, socket.inet_ntoa(ippack.dst), tcppack.sport, tcppack.dport)
                 seq=tcppack.seq
                 if not tcp_piece.has_key(tuple4):
@@ -50,8 +50,8 @@ def extract_file(filepath):
         print e.message
     f.close()
         
-    #A->BºÍB->AÊÇ°´Á½¸öÁ÷Í³¼ÆµÄ£¬ËùÒÔ±éÀúÒ»±ßÔ´£¬¾Í¿ÉÒÔ±éÀúµ½ËùÓĞÇé¿ö¡£
-    for t4,dic in tcp_piece.iteritems():    #¸ù¾İ4Ôª×é½øĞĞ×éÁ÷
+    #A->Bå’ŒB->Aæ˜¯æŒ‰ä¸¤ä¸ªæµç»Ÿè®¡çš„ï¼Œæ‰€ä»¥éå†ä¸€è¾¹æºï¼Œå°±å¯ä»¥éå†åˆ°æ‰€æœ‰æƒ…å†µã€‚
+    for t4,dic in tcp_piece.iteritems():    #æ ¹æ®4å…ƒç»„è¿›è¡Œç»„æµ
         srcip=t4[0]
         sport=t4[2]
         #md5_dstip_dstport=md5.md5(t4[1]+str(t4[3])).hexdigest()
@@ -67,29 +67,29 @@ def extract_file(filepath):
         #do something
         curpos=0        
         while(curpos<totallen):
-            #Èç¹ûÌØ±ğĞ¡£¬Ö±½ÓÌø¹ı
+            #å¦‚æœç‰¹åˆ«å°ï¼Œç›´æ¥è·³è¿‡
             if totallen-curpos<12: break
-            #Èç¹û²»ÊÇHandshakeÀàĞÍ
+            #å¦‚æœä¸æ˜¯Handshakeç±»å‹
             if sslcombined[curpos]!='\x16':
                 break
             handshake_len=struct.unpack('!H', sslcombined[curpos+3:curpos+5])[0]
             curpos+=5
             cur_handshakelen=0
-            while(cur_handshakelen<handshake_len):
+            while(cur_handshakelen<handshake_len and curpos<totallen):
                 this_handshake_len=struct.unpack('!I', '\x00'+sslcombined[curpos+1:curpos+4])[0]
                 cur_handshakelen+=this_handshake_len+4
-                if sslcombined[curpos]=='\x0b': #Èç¹ûÕâÒ»¶ÎÊÇÖ¤Êé
+                if sslcombined[curpos]=='\x0b': #å¦‚æœè¿™ä¸€æ®µæ˜¯è¯ä¹¦
                     certlen=struct.unpack('!I', '\x00'+sslcombined[curpos+4:curpos+7])[0]
-                    if certlen>totallen:    #Ö¤ÊéµÄ³¤¶È³¬¹ıÁËÊı¾İ°üµÄ³¤¶È£¬Í¨³£ÊÇÊı¾İ°üÊı¾İ¶ªÊ§µ¼ÖÂµÄ
+                    if certlen>totallen:    #è¯ä¹¦çš„é•¿åº¦è¶…è¿‡äº†æ•°æ®åŒ…çš„é•¿åº¦ï¼Œé€šå¸¸æ˜¯æ•°æ®åŒ…æ•°æ®ä¸¢å¤±å¯¼è‡´çš„
                         break                    
                     curpos+=7
-                    sub_cert_len=0  #ËùÓĞ×ÓÖ¤ÊéµÄ×Ü´óĞ¡            
-                    sub_cert_count=1    #×ÓÖ¤Êé±àºÅ£¬±àºÅĞÎ³ÉÖ¤ÊéÁ´£¬Ô½¿¿ÏÂÔ½Ğ¡
+                    sub_cert_len=0  #æ‰€æœ‰å­è¯ä¹¦çš„æ€»å¤§å°            
+                    sub_cert_count=1    #å­è¯ä¹¦ç¼–å·ï¼Œç¼–å·å½¢æˆè¯ä¹¦é“¾ï¼Œè¶Šé ä¸‹è¶Šå°
                     while(sub_cert_len<certlen):
-                        this_sub_len=struct.unpack('!I', '\x00'+sslcombined[curpos:curpos+3])[0]   #µ±Ç°×ÓÖ¤Êé´óĞ¡
+                        this_sub_len=struct.unpack('!I', '\x00'+sslcombined[curpos:curpos+3])[0]   #å½“å‰å­è¯ä¹¦å¤§å°
                         curpos+=3
                         this_sub_cert=sslcombined[curpos:curpos+this_sub_len]
-                        sub_cert_len+=this_sub_len+3    #+3ÊÇ¡°Ö¤Êé³¤¶È¡±£¬3¸ö×Ö½Ú
+                        sub_cert_len+=this_sub_len+3    #+3æ˜¯â€œè¯ä¹¦é•¿åº¦â€ï¼Œ3ä¸ªå­—èŠ‚
                         curpos+=this_sub_len
                         md5cert=md5.md5(this_sub_cert).hexdigest()
                         filename='%s_%d_%d_%s.cer' % (srcip, sport, sub_cert_count, md5cert)
@@ -102,7 +102,7 @@ def extract_file(filepath):
                         print filename
                         sub_cert_count+=1      
                 else:
-                    curpos+=this_handshake_len+4  #²»ÊÇÖ¤ÊéÖ±½ÓÌø¹ı
+                    curpos+=this_handshake_len+4  #ä¸æ˜¯è¯ä¹¦ç›´æ¥è·³è¿‡
                 
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description='Extract SSL certs')
