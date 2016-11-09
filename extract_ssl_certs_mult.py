@@ -1,15 +1,12 @@
-#coding=utf-8
-#version:20161026
+#coding=gbk
+#version:20161109
 import dpkt
 import struct, socket, sys, os, argparse, md5
 
 import multiprocessing
 
-#####################################
-# Global vars
-
 def showUsage():
-    print 'extract_ssl_certs.py [-f æ–‡ä»¶å|-d ç›®å½•]'
+    print 'extract_ssl_certs.py [-f ÎÄ¼şÃû|-d Ä¿Â¼]'
 
 def extract_file(filepath):
     if not filepath.endswith('cap'):
@@ -21,7 +18,7 @@ def extract_file(filepath):
     try:
         pcap = dpkt.pcap.Reader(f)
     except:
-        print "Error reading cap: %s"%filepath
+        print "Error reading cap: %s", filepath
         return
 
     count=0
@@ -30,18 +27,18 @@ def extract_file(filepath):
             count+=1
             try:
                 upperdata=dpkt.ethernet.Ethernet(buf).data
-                while upperdata.__class__ not in [dpkt.ip.IP, str]:   #å¾ªç¯å»æ‰¾IPå±‚ï¼Œè¿™ä¸»è¦æ˜¯è§£å†³ä¸€äº›ç½‘ç»œæœ‰pppoeå’Œpppå±‚çš„ç¼˜æ•…
+                while upperdata.__class__ not in [dpkt.ip.IP, str]:   #Ñ­»·È¥ÕÒIP²ã£¬ÕâÖ÷ÒªÊÇ½â¾öÒ»Ğ©ÍøÂçÓĞpppoeºÍppp²ãµÄÔµ¹Ê
                     upperdata=upperdata.data
                 if upperdata.__class__==dpkt.ip.IP:
                     #if upperdata.sport!=443: continue
                     ippack=upperdata
                     tcppack=ippack.data
                     ssldata=tcppack.data
-                else:   #IPå±‚æœªæ‰¾åˆ°
+                else:   #IP²ãÎ´ÕÒµ½
                     continue
-                if not ssldata: continue    #å¦‚æœæ˜¯ç©ºå°±æ‰”æ‰äº†ï¼ŒåŒ…æ‹¬é‚£ä¸ªåŒä¸€ä¸ªSEQå¯¹åº”çš„ACKçš„åŒ…
+                if not ssldata: continue    #Èç¹ûÊÇ¿Õ¾ÍÈÓµôÁË£¬°üÀ¨ÄÇ¸öÍ¬Ò»¸öSEQ¶ÔÓ¦µÄACKµÄ°ü
                 srcip=socket.inet_ntoa(ippack.src)
-                #å®šä¹‰äº†ä¸€ä¸ªå››å…ƒç»„ï¼ˆæºIPï¼Œç›®çš„IPï¼Œæºç«¯å£ï¼Œç›®çš„ç«¯å£ï¼‰
+                #¶¨ÒåÁËÒ»¸öËÄÔª×é£¨Ô´IP£¬Ä¿µÄIP£¬Ô´¶Ë¿Ú£¬Ä¿µÄ¶Ë¿Ú£©
                 tuple4=(srcip, socket.inet_ntoa(ippack.dst), tcppack.sport, tcppack.dport)
                 seq=tcppack.seq
                 if not tcp_piece.has_key(tuple4):
@@ -52,11 +49,12 @@ def extract_file(filepath):
     except Exception,e:
         print e.message
     f.close()
-    
-    #A->Bå’ŒB->Aæ˜¯æŒ‰ä¸¤ä¸ªæµç»Ÿè®¡çš„ï¼Œæ‰€ä»¥éå†ä¸€è¾¹æºï¼Œå°±å¯ä»¥éå†åˆ°æ‰€æœ‰æƒ…å†µã€‚
-    for t4,dic in tcp_piece.iteritems():    #æ ¹æ®4å…ƒç»„è¿›è¡Œç»„æµ
+        
+    #A->BºÍB->AÊÇ°´Á½¸öÁ÷Í³¼ÆµÄ£¬ËùÒÔ±éÀúÒ»±ßÔ´£¬¾Í¿ÉÒÔ±éÀúµ½ËùÓĞÇé¿ö¡£
+    for t4,dic in tcp_piece.iteritems():    #¸ù¾İ4Ôª×é½øĞĞ×éÁ÷
         srcip=t4[0]
         sport=t4[2]
+        #md5_dstip_dstport=md5.md5(t4[1]+str(t4[3])).hexdigest()
         seq=min(dic.keys())
         sslcombined=dic[seq]
         piecelen=len(dic[seq])
@@ -69,64 +67,71 @@ def extract_file(filepath):
         #do something
         curpos=0        
         while(curpos<totallen):
-            #å¦‚æœç‰¹åˆ«å°ï¼Œç›´æ¥è·³è¿‡
+            #Èç¹ûÌØ±ğĞ¡£¬Ö±½ÓÌø¹ı
             if totallen-curpos<12: break
-            #å¦‚æœä¸æ˜¯ä¼ é€’è¯ä¹¦çš„åŒ…ï¼Œè·³è¿‡
-            if sslcombined[curpos]!='\x16' or sslcombined[curpos+5]!='\x0b':
-                curpos+=5+struct.unpack('!H', sslcombined[curpos+3:curpos+5])[0]
-                continue
-            #å–å¾—æ€»é•¿åº¦
-            certlen=struct.unpack('!I', '\x00'+sslcombined[curpos+9:curpos+12])[0]
-            if certlen>totallen:    #è¯ä¹¦çš„é•¿åº¦è¶…è¿‡äº†æ•°æ®åŒ…çš„é•¿åº¦ï¼Œé€šå¸¸æ˜¯æ•°æ®åŒ…æ•°æ®ä¸¢å¤±å¯¼è‡´çš„
+            #Èç¹û²»ÊÇHandshakeÀàĞÍ
+            if sslcombined[curpos]!='\x16':
                 break
-            if certlen>50000:
-                print 'Very big cert.'
-                curpos+=5+struct.unpack('!H', sslcombined[curpos+3:curpos+5])[0]
-                continue
-            
-            curpos+=12
-            sub_cert_len=0  #æ‰€æœ‰å­è¯ä¹¦çš„æ€»å¤§å°            
-            sub_cert_count=1    #å­è¯ä¹¦ç¼–å·ï¼Œç¼–å·å½¢æˆè¯ä¹¦é“¾ï¼Œè¶Šé ä¸‹è¶Šå°
-            while(sub_cert_len<certlen):
-                this_sub_len=struct.unpack('!I', '\x00'+sslcombined[curpos:curpos+3])[0]   #å½“å‰å­è¯ä¹¦å¤§å°
-                curpos+=3
-                this_sub_cert=sslcombined[curpos:curpos+this_sub_len]
-                sub_cert_len+=this_sub_len+3    #+3æ˜¯â€œè¯ä¹¦é•¿åº¦â€ï¼Œ3ä¸ªå­—èŠ‚
-                curpos+=this_sub_len
-                md5cert=md5.md5(this_sub_cert).hexdigest()
-                filename='%s_%d_%d_%s.cer' % (srcip, sport, sub_cert_count, md5cert)
-                with open('certs\\%s' % filename, 'wb') as f:
-                    f.write(this_sub_cert)
-                print filename
-                sub_cert_count+=1         
-            break
-
-if __name__=='__main__':
+            handshake_len=struct.unpack('!H', sslcombined[curpos+3:curpos+5])[0]
+            curpos+=5
+            cur_handshakelen=0
+            while(cur_handshakelen<handshake_len):
+                this_handshake_len=struct.unpack('!I', '\x00'+sslcombined[curpos+1:curpos+4])[0]
+                cur_handshakelen+=this_handshake_len+4
+                if sslcombined[curpos]=='\x0b': #Èç¹ûÕâÒ»¶ÎÊÇÖ¤Êé
+                    certlen=struct.unpack('!I', '\x00'+sslcombined[curpos+4:curpos+7])[0]
+                    if certlen>totallen:    #Ö¤ÊéµÄ³¤¶È³¬¹ıÁËÊı¾İ°üµÄ³¤¶È£¬Í¨³£ÊÇÊı¾İ°üÊı¾İ¶ªÊ§µ¼ÖÂµÄ
+                        break                    
+                    curpos+=7
+                    sub_cert_len=0  #ËùÓĞ×ÓÖ¤ÊéµÄ×Ü´óĞ¡            
+                    sub_cert_count=1    #×ÓÖ¤Êé±àºÅ£¬±àºÅĞÎ³ÉÖ¤ÊéÁ´£¬Ô½¿¿ÏÂÔ½Ğ¡
+                    while(sub_cert_len<certlen):
+                        this_sub_len=struct.unpack('!I', '\x00'+sslcombined[curpos:curpos+3])[0]   #µ±Ç°×ÓÖ¤Êé´óĞ¡
+                        curpos+=3
+                        this_sub_cert=sslcombined[curpos:curpos+this_sub_len]
+                        sub_cert_len+=this_sub_len+3    #+3ÊÇ¡°Ö¤Êé³¤¶È¡±£¬3¸ö×Ö½Ú
+                        curpos+=this_sub_len
+                        md5cert=md5.md5(this_sub_cert).hexdigest()
+                        filename='%s_%d_%d_%s.cer' % (srcip, sport, sub_cert_count, md5cert)
+                        try:
+                            os.mkdir('certs\\%s'%srcip)
+                        except:
+                            pass
+                        with open('certs\\%s\\%s'%(srcip,filename), 'wb') as f:
+                            f.write(this_sub_cert)
+                        print filename
+                        sub_cert_count+=1      
+                else:
+                    curpos+=this_handshake_len+4  #²»ÊÇÖ¤ÊéÖ±½ÓÌø¹ı
+                
+if __name__=="__main__":
     parser = argparse.ArgumentParser(description='Extract SSL certs')
     parser.add_argument("-f", "--file", action='store', help="Extract SSL certificates from a single file.", default = None)
     parser.add_argument("-d", "--dir", action='store', help="Extract SSL certificates from a directory containing cap files.", default = None)
-    parser.add_argument("-e", "--exclude", action='store', help="Filename containing skip ip list, ip list in this file will be skip when extracting.", default=None)
-    
+    #parser.add_argument("-e", "--exclude", action='store', help="Filename containing skip ip list, ip list in this file will be skip when extracting.", default=None)
+    #parser.add_argument("-h", "--help")
     args = parser.parse_args()
+    
     if args.file is None and args.dir is None or args.file is not None and args.dir is not None:
         print "Either -f or -d is required, but can't be both there."
         showUsage()
         exit(-1)
-    
+
     try:
         os.mkdir('certs')
     except:
         pass
     
+    cpu_core=multiprocessing.cpu_count()-1
+    if cpu_core<1:
+        cpu_core=1
+    pool=multiprocessing.Pool(cpu_core)
+    
     if args.dir!=None:
-        cpu_count=multiprocessing.cpu_count()-2
-        if cpu_count<0:
-            cpu_count=1
-        p=multiprocessing.Pool(cpu_count)
         for root, parent, files in os.walk(args.dir):
-            if not files==[]:
-                p.map(extract_file, map(lambda x:root+os.sep+x, files))
-        
+            if files!=[]:
+                pool.map(extract_file, map(lambda x:root+os.sep+x, files))
+                
     elif args.file!=None:
         extract_file(args.file)
     
