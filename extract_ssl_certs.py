@@ -122,9 +122,9 @@ def extract_file(filepath):
             if sslcombined[curpos]!='\x16':
                 break
             handshake_len=struct.unpack('!H', sslcombined[curpos+3:curpos+5])[0]
-            curpos+=curpos+5
+            curpos+=5
             cur_handshakelen=0
-            while(cur_handshakelen<handshake_len):
+            while(cur_handshakelen<handshake_len and curpos+4<totallen):
                 this_handshake_len=struct.unpack('!I', '\x00'+sslcombined[curpos+1:curpos+4])[0]
                 if sslcombined[curpos]=='\x0b': #如果这一段是证书
                     certlen=struct.unpack('!I', '\x00'+sslcombined[curpos+4:curpos+7])[0]
